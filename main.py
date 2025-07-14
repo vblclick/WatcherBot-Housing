@@ -66,5 +66,6 @@ def scrape():
             print("Error en scraping:", e)
     save_seen(seen)
 
+
 if __name__ == "__main__":
     scrape()
