@@ -1,28 +1,32 @@
 import requests
 import json
-import time
+import os
 from bs4 import BeautifulSoup
 
 # Configuración del bot
-TELEGRAM_TOKEN = "8095048569:AAHrhxm0PgaFxf5LvWaViA4hAB4b9cst06k"
-CHAT_ID = "1935816973"
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
 URLS = [
     "https://www.pararius.com/apartments/arnhem/0-1200/radius-10",
     "https://www.pararius.com/apartments/wageningen/0-1200/radius-10",
     "https://www.pararius.com/apartments/utrecht/0-1200/radius-25",
-    "https://www.funda.nl/zoeken/huur?selected_area=[%22wageningen,15km%22]&price=%220-1500%22&object_type=[%22apartment%22]&sort=%22date_down%22",
     "https://www.huurwoningen.nl/en/in/wageningen/?radius=10",
     "https://www.huurwoningen.nl/en/in/arnhem/",
     "https://www.huurwoningen.nl/en/in/nijmegen/",
-    "https://kamernet.nl/en/for-rent/properties-arnhem?pageNo=1&radius=4&minSize=0&maxRent=0&searchCategories=2%2C1%2C4%2C17%2C19%2C18&searchView=1&sort=1&hasInternet=false&isBathroomPrivate=false&isKitchenPrivate=false&isToiletPrivate=false&suitableForNumberOfPersons=0&isSmokingInsideAllowed=false&isPetsInsideAllowed=false&nwlat=54.216270703936516&nwlng=-3.267085312500001&selat=50.130263513834905&selng=12.5532271875&mapZoom=7&mapMarkerLat=0&mapMarkerLng=0",
-    "https://kamernet.nl/en/for-rent/room-wageningen?pageNo=1&radius=5&minSize=0&maxRent=0&searchView=1&sort=1&hasInternet=false&isBathroomPrivate=false&isKitchenPrivate=false&isToiletPrivate=false&suitableForNumberOfPersons=0&isSmokingInsideAllowed=false&isPetsInsideAllowed=false&nwlat=54.216270703936516&nwlng=-3.267085312500001&selat=50.130263513834905&selng=12.5532271875&mapZoom=7&mapMarkerLat=0&mapMarkerLng=0",
-    "https://kamernet.nl/en/for-rent/properties-utrecht?pageNo=1&radius=4&minSize=0&maxRent=0&searchCategories=2%2C1%2C4%2C17%2C19%2C18&searchView=1&sort=1&hasInternet=false&isBathroomPrivate=false&isKitchenPrivate=false&isToiletPrivate=false&suitableForNumberOfPersons=0&isSmokingInsideAllowed=false&isPetsInsideAllowed=false&nwlat=54.216270703936516&nwlng=-3.267085312500001&selat=50.130263513834905&selng=12.5532271875&mapZoom=7&mapMarkerLat=0&mapMarkerLng=0",
-    "https://kamernet.nl/en/for-rent/properties-nijmegen?pageNo=1&radius=4&minSize=0&maxRent=0&searchCategories=2%2C1%2C4%2C17%2C19%2C18&searchView=1&sort=1&hasInternet=false&isBathroomPrivate=false&isKitchenPrivate=false&isToiletPrivate=false&suitableForNumberOfPersons=0&isSmokingInsideAllowed=false&isPetsInsideAllowed=false&nwlat=54.216270703936516&nwlng=-3.267085312500001&selat=50.130263513834905&selng=12.5532271875&mapZoom=7&mapMarkerLat=0&mapMarkerLng=0"
+    "https://kamernet.nl/en/for-rent/properties-arnhem?pageNo=1&radius=4",
+    "https://kamernet.nl/en/for-rent/properties-utrecht?pageNo=1&radius=4",
+    "https://kamernet.nl/en/for-rent/properties-nijmegen?pageNo=1&radius=4"
 ]
+BASE_URLS = {
+    "pararius.com": "https://www.pararius.com",
+    "huurwoningen.nl": "https://www.huurwoningen.nl",
+    "kamernet.nl": "https://kamernet.nl"
+}
 DATA_FILE = "data.json"
 
-# Función para enviar mensajes a Telegram
+
 def send_telegram(msg):
+    """Enviar mensaje a Telegram"""
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {"chat_id": CHAT_ID, "text": msg, "disable_web_page_preview": True}
     try:
@@ -30,20 +34,49 @@ def send_telegram(msg):
     except Exception as e:
         print("Error enviando mensaje a Telegram:", e)
 
-# Cargar datos vistos previamente
+
 def load_seen():
+    """Cargar propiedades vistas"""
     try:
         with open(DATA_FILE, "r") as f:
             return json.load(f)
     except FileNotFoundError:
         return {}
 
-# Guardar datos vistos
+
 def save_seen(seen):
+    """Guardar propiedades vistas"""
     with open(DATA_FILE, "w") as f:
         json.dump(seen, f)
 
-# Función principal de scraping
+
+def find_new_properties_pararius(soup):
+    new_links = []
+    for label in soup.find_all("span", class_="listing-label listing-label--new"):
+        link_tag = label.find_parent("div", class_="listing-search-item__label").find_parent("div").find("a", class_="listing-search-item__link")
+        if link_tag and link_tag.get("href"):
+            new_links.append(BASE_URLS["pararius.com"] + link_tag["href"])
+    return new_links
+
+
+def find_new_properties_huurwoningen(soup):
+    new_links = []
+    for label in soup.find_all("span", class_="listing-label listing-label--new"):
+        link_tag = label.find_parent("a", class_="listing-search-item__link")
+        if link_tag and link_tag.get("href"):
+            new_links.append(link_tag["href"])
+    return new_links
+
+
+def find_new_properties_kamernet(soup):
+    new_links = []
+    for label in soup.find_all("span", class_="MuiChip-label MuiChip-labelMedium mui-style-9iedg7"):
+        link_tag = label.find_parent("a")
+        if link_tag and link_tag.get("href"):
+            new_links.append(BASE_URLS["kamernet.nl"] + link_tag["href"])
+    return new_links
+
+
 def scrape():
     seen = load_seen()
     for url in URLS:
@@ -51,21 +84,28 @@ def scrape():
         try:
             res = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
             soup = BeautifulSoup(res.text, "html.parser")
-            links = soup.find_all("a", href=True)
-            new_items = []
-            for link in links:
-                href = link["href"]
-                if href not in seen.get(url, []):
-                    seen.setdefault(url, []).append(href)
-                    full_link = href if href.startswith("http") else f"{url}{href}"
-                    new_items.append(full_link)
-            if new_items:
-                for item in new_items:
-                    send_telegram(f"🆕 Nuevo anuncio:\n{item}")
+            domain = next((k for k in BASE_URLS if k in url), None)
+
+            if domain == "pararius.com":
+                new_items = find_new_properties_pararius(soup)
+            elif domain == "huurwoningen.nl":
+                new_items = find_new_properties_huurwoningen(soup)
+            elif domain == "kamernet.nl":
+                new_items = find_new_properties_kamernet(soup)
+            else:
+                new_items = []
+
+            for item in new_items:
+                if item not in seen.get(url, []):
+                    send_telegram(f"🆕 Nuevo piso:\n{item}")
+                    seen.setdefault(url, []).append(item)
+
         except Exception as e:
             print("Error en scraping:", e)
+
     save_seen(seen)
 
 
 if __name__ == "__main__":
     scrape()
+
